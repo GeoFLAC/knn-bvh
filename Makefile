@@ -121,21 +121,16 @@ examples: prepare
 # Stage 1: Prepare (Submodule & Patches)
 # ---------------------------------------------------------------------------
 prepare:
-	@echo "1. Checking submodule status..."
 	@if git submodule status $(LBVHDIR) | grep -q '^[-+]'; then \
-		echo "   Status mismatch or patched. Force updating submodule $(LBVHDIR)..."; \
+		echo "Submodule $(LBVHDIR) status mismatch. Updating submodule $(LBVHDIR)..."; \
 		git submodule update --init --recursive --force $(LBVHDIR); \
-	else \
-		echo "   Submodule $(LBVHDIR) is clean and up to date."; \
 	fi
-	
-	@echo "2. Checking patch status..."
-	@if (cd $(LBVHDIR) && git apply --reverse --check ../$(PATCH_FILE) >/dev/null 2>&1); then \
-		echo "   Patch $(PATCH_FILE) is already applied."; \
-	else \
-		echo "   Applying $(PATCH_FILE)..."; \
-		(cd $(LBVHDIR) && git apply ../$(PATCH_FILE)); \
+
+	@if !(cd $(LBVHDIR) && git apply --reverse --check ../$(PATCH_FILE) >/dev/null 2>&1); then \
+		echo "Applying $(PATCH_FILE) to $(LBVHDIR)..."; \
+		(cd $(LBVHDIR) && git apply ../$(PATCH_FILE) && git update-index --skip-worktree lbvh/bvh.cuh); \
 	fi
+# to unmask: git update-index --no-skip-worktree lbvh/bvh.cuh 
 
 # ---------------------------------------------------------------------------
 # Stage 2: Actual Build Rules
