@@ -19,6 +19,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Fix Git dubious ownership for container
+      run: git config --global --add safe.directory '*'
+
     - name: Show compiler versions
       run: |
         nvcc --version
