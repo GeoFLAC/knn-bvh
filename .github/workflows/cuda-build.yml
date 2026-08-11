@@ -13,8 +13,30 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    # A prebuilt environment shared with DynEarthSol, which publishes it from
+    # docker/Dockerfile.cuda. It is the same upstream nvhpc SDK with comm_libs,
+    # math_libs and the profilers stripped in a builder stage, so "Starting job
+    # container" pulls a few GB rather than the ~20 GB the devel image unpacks
+    # to. That Dockerfile keeps cuda/bin on PATH for this build specifically,
+    # because the Makefile here calls nvcc unqualified and derives CUDA_HOME
+    # from `which nvcc`; it also carries the git and ca-certificates that
+    # `make prepare` needs to fetch the lbvh submodule.
+    #
+    # Two couplings to keep in mind. The tag is rebuilt only when DynEarthSol's
+    # docker/ tree changes, so a break there surfaces here; and the package is
+    # private, so the pull is authenticated. GITHUB_TOKEN is scoped to this
+    # repository and can read the package only while the package grants this
+    # repository access -- see its "Manage Actions access" list.
+    permissions:
+      contents: read
+      packages: read
+
     container:
-      image: nvcr.io/nvidia/nvhpc:25.7-devel-cuda_multi-ubuntu22.04
+      image: ghcr.io/geoflac/dynearthsol/nvhpc-build-env:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
     - uses: actions/checkout@v4
