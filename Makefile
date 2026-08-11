@@ -1,14 +1,14 @@
 # Makefile for knn-bvh
 #
 # Targets:
-#   make             — build static library (lib/libknn_bvh.{2,3}d.a)
-#   make shared      — build shared library (lib/libknn_bvh.{2,3}d.so)
+#   make             — build static library (lib/libknn_bvh.{2,3}d.sm<cc>.a)
+#   make shared      — build shared library (lib/libknn_bvh.{2,3}d.sm<cc>.so)
 #   make examples    — build all example binaries in bin/
 #   make clean
 #
 # Options (pass on command line):
 #   NDIM=2           — 2-D point clouds (default: 3)
-#   SM=86            — CUDA compute capability (default: auto-detect)
+#   SM=86            — CUDA compute capability (default: auto-detect; names the artifact)
 #   DEBUG=1          — disable optimisations, add -G
 #   NVCC=nvcc        — path to nvcc
 #   CXX=g++          — C++ compiler for .cpp examples (default g++; nvc++ when openacc=1)
@@ -16,12 +16,13 @@
 
 NVCC      ?= nvcc
 CXX       ?= g++
-# Detect SM from nvidia-smi (strips the dot: "8.0" -> "80").
-# Falls back to querying via a tiny nvcc-compiled helper, then to "80".
+# Detect SM from nvidia-smi (strips the dot: "8.0" -> "80"), else fall back to "80".
 SM        ?= $(shell nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null \
-                 | head -1 | tr -d '.' \
-                 || $(NVCC) --run -w "int main(){int d;cudaGetDevice(&d);cudaDeviceProp p;cudaGetDeviceProperties(&p,d);printf(\"%d%d\",p.major,p.minor);return 0;}" 2>/dev/null \
-                 || echo 80)
+                 | head -1 | tr -d '.')
+ifeq ($(strip $(SM)),)
+  SM := 80
+  $(warning No GPU detected via nvidia-smi -- defaulting to SM=$(SM). Pass SM=<cc> to build for another arch.)
+endif
 NDIM      ?= 3
 DEBUG     ?= 0
 CUDA_HOME ?= $(dir $(shell which $(NVCC)))..
@@ -29,6 +30,9 @@ openacc   ?= 0
 
 # Dimension suffix: "3d" or "2d"
 DIMSUF = $(NDIM)d
+
+# Artifact suffix: dimension plus GPU arch, e.g. "3d.sm80".
+LIBSUF = $(DIMSUF).sm$(SM)
 
 # When openacc=1: use nvc++ and NVHPC's bundled nvcc (mirrors DynEarthSol's Makefile)
 ifeq ($(openacc), 1)
@@ -77,30 +81,30 @@ CUDA_LDFLAGS = -L$(CUDA_HOME)/lib64 -lcudart -lcuda
 ifeq ($(openacc), 1)
 	CPP_COMPILE = $(CXX) -std=c++14 -I$(INCDIR) -MMD -MP \
                   -acc=gpu -cuda -DACC -Minfo=accel \
-                  -o $@ $< -L$(LIBDIR) -lknn_bvh.$(DIMSUF) \
+                  -o $@ $< -L$(LIBDIR) -lknn_bvh.$(LIBSUF) \
                   -acc=gpu -cuda -gpu=mem:managed
 else
 	CPP_COMPILE = $(NVCC) -std=c++14 -arch=sm_$(SM) -I$(INCDIR) -MMD -MP \
                   -ccbin $(CXX) -x c++ \
-                  -o $@ $< -L$(LIBDIR) -lknn_bvh.$(DIMSUF)
+                  -o $@ $< -L$(LIBDIR) -lknn_bvh.$(LIBSUF)
 endif
 
 # ---------------------------------------------------------------------------
 # Library & Targets
 # ---------------------------------------------------------------------------
 LIB_SRC   = $(SRCDIR)/knn_bvh.cu
-LIB_OBJ   = $(LIBDIR)/knn_bvh.$(DIMSUF).o
-LIB_DLINK = $(LIBDIR)/knn_bvh.$(DIMSUF)_dlink.o
-LIB_A     = $(LIBDIR)/libknn_bvh.$(DIMSUF).a
-LIB_SO    = $(LIBDIR)/libknn_bvh.$(DIMSUF).so
+LIB_OBJ   = $(LIBDIR)/knn_bvh.$(LIBSUF).o
+LIB_DLINK = $(LIBDIR)/knn_bvh.$(LIBSUF)_dlink.o
+LIB_A     = $(LIBDIR)/libknn_bvh.$(LIBSUF).a
+LIB_SO    = $(LIBDIR)/libknn_bvh.$(LIBSUF).so
 
 CU_SRCS  = $(wildcard examples/*.cu)
 CPP_SRCS = $(wildcard examples/*.cpp)
 CU_BINS  = $(patsubst examples/%.cu, $(BINDIR)/%.$(DIMSUF), $(CU_SRCS))
 CPP_BINS = $(patsubst examples/%.cpp,$(BINDIR)/%.$(DIMSUF), $(CPP_SRCS))
 
-DEPS = $(LIBDIR)/knn_bvh.$(DIMSUF).d \
-       $(LIBDIR)/libknn_bvh.$(DIMSUF).d \
+DEPS = $(LIBDIR)/knn_bvh.$(LIBSUF).d \
+       $(LIBDIR)/libknn_bvh.$(LIBSUF).d \
        $(CU_BINS:%=%.d) \
        $(CPP_BINS:%=%.d)
 
@@ -179,7 +183,7 @@ $(LIB_SO): $(LIB_SRC) | $(LIBDIR)
 
 # .cu examples
 $(BINDIR)/%.$(DIMSUF): examples/%.cu $(LIB_A) | $(BINDIR)
-	$(NVCC) $(NVCCFLAGS) -o $@ $< -L$(LIBDIR) -lknn_bvh.$(DIMSUF) -lcuda
+	$(NVCC) $(NVCCFLAGS) -o $@ $< -L$(LIBDIR) -lknn_bvh.$(LIBSUF) -lcuda
 	@echo "Built example: $@"
 
 # .cpp examples

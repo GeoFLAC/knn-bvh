@@ -48,7 +48,8 @@ make DEBUG=1 examples
 ```
 
 Output:
-- `lib/libknn_bvh.3d.a` (or `.2d.a`) — static library
+- `lib/libknn_bvh.3d.sm80.a` — static library (suffix matches `NDIM` and `SM`, so
+  archives for different GPUs coexist)
 - `bin/basic_knn.3d`, `bin/batch_knn.3d` — example programs (suffix matches `NDIM`)
 
 ## Quick Start
@@ -88,10 +89,10 @@ int main() {
 }
 ```
 
-Link your code against `lib/libknn_bvh.3d.a` (or `.2d.a`):
+Link your code against `lib/libknn_bvh.3d.sm80.a`, naming the arch you built for:
 
 ```bash
-nvcc -std=c++14 -I include -I lbvh my_code.cu -L lib -lknn_bvh.3d -o my_program
+nvcc -std=c++14 -I include -I lbvh my_code.cu -L lib -lknn_bvh.3d.sm80 -o my_program
 ```
 
 ## API Reference
@@ -198,7 +199,7 @@ stub is needed, so the archive links cleanly with both `nvcc` and `g++`.
 nvcc -std=c++14 -arch=sm_XX -I include \
      -ccbin g++ -x c++ \
      my_code.cpp \
-     -L lib -lknn_bvh.3d \
+     -L lib -lknn_bvh.3d.smXX \
      -o my_program
 ```
 
