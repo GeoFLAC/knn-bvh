@@ -13,6 +13,8 @@
 #   NVCC=nvcc        — path to nvcc
 #   CXX=g++          — C++ compiler for .cpp examples (default g++; nvc++ when openacc=1)
 #   openacc=1        — compile .cpp examples with nvc++ (-acc=gpu -cuda)
+#   CXXSTD=c++17     — C++ standard for nvcc/host compiles (default: auto,
+#                      based on CUDA major version; see below)
 
 NVCC      ?= nvcc
 CXX       ?= g++
@@ -47,14 +49,25 @@ LIBDIR  = lib
 BINDIR  = bin
 LBVHDIR = lbvh
 
+# CUDA 13's bundled Thrust/CUB/libcu++ (CCCL) hard-require C++17 and #error
+# out below it; CUDA <=12 is fine with C++14, which is this project's floor.
+# Detect the nvcc major version and pick the standard accordingly; override
+# with CXXSTD=c++NN on the command line if auto-detection guesses wrong.
+NVCC_MAJOR := $(shell $(NVCC) --version 2>/dev/null | sed -n 's/.*release \([0-9]\{1,\}\)\..*/\1/p')
+ifeq ($(shell [ "$(NVCC_MAJOR)" -ge 13 ] 2>/dev/null && echo yes),yes)
+	CXXSTD ?= c++17
+else
+	CXXSTD ?= c++14
+endif
+
 # nvcc flags (shared by lib and .cu examples)
-NVCCFLAGS = -std=c++14 -arch=sm_$(SM) \
+NVCCFLAGS = -std=$(CXXSTD) -arch=sm_$(SM) \
             -I$(INCDIR) -I$(LBVHDIR) \
             --expt-relaxed-constexpr --extended-lambda \
             -MMD -MP
 
 # g++ flags (used for .cpp examples in non-openacc mode)
-CXXFLAGS  = -std=c++14 -I$(INCDIR) \
+CXXFLAGS  = -std=$(CXXSTD) -I$(INCDIR) \
             -I$(CUDA_HOME)/include \
             -MMD -MP
 
@@ -79,12 +92,12 @@ CUDA_LDFLAGS = -L$(CUDA_HOME)/lib64 -lcudart -lcuda
 #            device code and enables managed memory (mirrors DynEarthSol).
 # default:   nvcc -ccbin $(CXX) wrapper (no CUDA syntax needed in the source).
 ifeq ($(openacc), 1)
-	CPP_COMPILE = $(CXX) -std=c++14 -I$(INCDIR) -MMD -MP \
+	CPP_COMPILE = $(CXX) -std=$(CXXSTD) -I$(INCDIR) -MMD -MP \
                   -acc=gpu -cuda -DACC -Minfo=accel \
                   -o $@ $< -L$(LIBDIR) -lknn_bvh.$(LIBSUF) \
                   -acc=gpu -cuda -gpu=mem:managed
 else
-	CPP_COMPILE = $(NVCC) -std=c++14 -arch=sm_$(SM) -I$(INCDIR) -MMD -MP \
+	CPP_COMPILE = $(NVCC) -std=$(CXXSTD) -arch=sm_$(SM) -I$(INCDIR) -MMD -MP \
                   -ccbin $(CXX) -x c++ \
                   -o $@ $< -L$(LIBDIR) -lknn_bvh.$(LIBSUF)
 endif
