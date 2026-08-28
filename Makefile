@@ -123,7 +123,7 @@ DEPS = $(LIBDIR)/knn_bvh.$(LIBSUF).d \
 
 PATCH_FILE = lbvh_fix.patch
 
-.PHONY: all shared examples clean prepare build_static build_shared build_examples
+.PHONY: all shared examples clean prepare build_static build_shared build_examples FORCE
 
 all: prepare
 	$(MAKE) build_static
@@ -176,8 +176,20 @@ build_static: $(LIB_A)
 build_shared: $(LIB_SO)
 build_examples: $(CU_BINS) $(CPP_BINS)
 
+STAMP = $(LIBDIR)/toolchain.$(LIBSUF).stamp
+
+$(STAMP): FORCE | $(LIBDIR)
+	@{ command -v $(NVCC); $(NVCC) --version 2>/dev/null | grep -m1 release; \
+	   echo '$(NVCCFLAGS)'; } > $@.tmp
+	@if cmp -s $@.tmp $@; then rm -f $@.tmp; else \
+		test -f $@ && echo "CUDA toolchain changed -- rebuilding $(LIB_A)"; \
+		mv $@.tmp $@; \
+	fi
+
+FORCE:
+
 # Relocatable device-code object
-$(LIB_OBJ): $(LIB_SRC) | $(LIBDIR)
+$(LIB_OBJ): $(LIB_SRC) $(STAMP) | $(LIBDIR)
 	$(NVCC) $(NVCCFLAGS) -dc -o $@ $<
 
 # Device-link stub
@@ -190,7 +202,7 @@ $(LIB_A): $(LIB_OBJ) $(LIB_DLINK) | $(LIBDIR)
 	@echo "Built static library: $@"
 
 # Shared library
-$(LIB_SO): $(LIB_SRC) | $(LIBDIR)
+$(LIB_SO): $(LIB_SRC) $(STAMP) | $(LIBDIR)
 	$(NVCC) $(NVCCFLAGS) --shared -Xcompiler -fPIC -o $@ $<
 	@echo "Built shared library: $@"
 
